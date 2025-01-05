@@ -1,19 +1,17 @@
 [build]
-  # Define the publish directory where static assets (like CSS, JS) should go.
-  # Flask might not have this, but this is necessary for Netlify to work.
+  # The folder where the build assets are placed
   publish = "build"
 
-  # Command to install dependencies and run the app with Gunicorn.
-  # You can change the app path if needed.
+  # Install dependencies and start the application using gunicorn
   command = "pip install -r requirements.txt && gunicorn -b :$PORT wsgi:app"
 
 [context.production.environment]
-  # Flask settings for the production environment
+  # Setting Flask environment variables
   FLASK_ENV = "production"
   FLASK_APP = "app.py"
-  PORT = 5000
+  PORT = "5000"  # Make sure PORT is a string
 
-# Optional: Add custom redirects if necessary for specific routes or behavior
+# Optional: Add custom redirects
 [[redirects]]
   from = "/old-url"
   to = "/new-url"

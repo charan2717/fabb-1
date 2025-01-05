@@ -187,7 +187,7 @@
 
 <body>
 
-    <!-- Sidebar (Left side) -->
+    <!-- Sidebar -->
     <div class="sidebar">
         <div class="search-container">
             <input type="text" id="search" placeholder="Search user...">
@@ -195,12 +195,11 @@
         <ul id="user-list" class="user-list"></ul>
     </div>
 
-    <!-- Chat area (Right side) -->
+    <!-- Chat Area -->
     <div class="chat-area">
         <div id="chat-header" class="chat-header">
-            <img src="https://www.example.com/user-profile.jpg" alt="User Profile">
-            <span id="recipient-name">Chat with User</span>
-            <a href="/logout" style="cursor: pointer; margin-left: auto; margin-top: 5px;">Sign Out</a>
+            <span id="recipient-name">Chat</span>
+            <a href="/logout" style="margin-left: auto;">Sign Out</a>
         </div>
         <div id="chat-body" class="chat-body">
             <div id="messages"></div>
@@ -213,87 +212,83 @@
 
     <script>
         const socket = io();
-let currentRoom = null;
-const username = "{{ username }}";
-let chatHistory = {}; // This will hold the chat history for each room
+        let currentRoom = null;
+        const username = "{{ username }}"; // Provided by Flask
+        const chatHistory = {}; // To hold chat history for rooms
 
-// Search for users
-document.getElementById("search").addEventListener("input", async (e) => {
-    const query = e.target.value;
-    const response = await fetch("/search_user", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username: query }),
-    });
-    const users = await response.json();
-    const userList = document.getElementById("user-list");
-    userList.innerHTML = "";
-    users.forEach((user) => {
-        const li = document.createElement("li");
-        li.textContent = user;
-        li.addEventListener("click", () => startChat(user)); // Clicking on a user will start a new chat
-        userList.appendChild(li);
-    });
-});
+        // Search for users
+        document.getElementById("search").addEventListener("input", async (e) => {
+            const query = e.target.value.trim();
+            if (!query) return;
 
-// Start a new chat with the selected user
-function startChat(recipient) {
-    // If a chat history already exists, load it, else start fresh
-    currentRoom = [username, recipient].sort().join("-");
-    const messages = document.getElementById("messages");
-    messages.innerHTML = ""; // Clear the current chat history
+            const response = await fetch("/search_user", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ username: query }),
+            });
 
-    // Load previous messages if any exist for this room
-    if (chatHistory[currentRoom]) {
-        chatHistory[currentRoom].forEach((message) => {
-            const div = document.createElement("div");
-            div.classList.add(message.sender === username ? "sender" : "receiver");
-            div.textContent = `${message.sender}: ${message.message}`;
-            messages.appendChild(div);
+            const users = await response.json();
+            const userList = document.getElementById("user-list");
+            userList.innerHTML = "";
+
+            users.forEach((user) => {
+                if (user === username) return; // Exclude self
+                const li = document.createElement("li");
+                li.textContent = user;
+                li.addEventListener("click", () => startChat(user));
+                userList.appendChild(li);
+            });
         });
-    }
 
-    // Update the header to the current user's name
-    document.getElementById("chat-header").textContent = `Chat with ${recipient}`;
+        // Start a new chat
+        function startChat(recipient) {
+            currentRoom = [username, recipient].sort().join("-");
+            document.getElementById("messages").innerHTML = ""; // Clear current chat
 
-    // Enable message input
-    document.getElementById("message").disabled = false;
-    document.getElementById("send").disabled = false;
+            // Load chat history
+            if (chatHistory[currentRoom]) {
+                chatHistory[currentRoom].forEach((msg) => addMessageToChat(msg));
+            }
 
-    // Join the room for the new user
-    socket.emit("join", { room: currentRoom, username });
+            // Update header
+            document.getElementById("recipient-name").textContent = `Chat with ${recipient}`;
 
-    // Scroll to the bottom of the chat window to see the latest messages
-    document.getElementById("messages").scrollTop = messages.scrollHeight;
-}
+            // Enable inputs
+            document.getElementById("message").disabled = false;
+            document.getElementById("send").disabled = false;
 
-// Send message to the server
-document.getElementById("send").addEventListener("click", () => {
-    const message = document.getElementById("message").value;
-    if (message.trim()) {
-        socket.emit("send_message", { room: currentRoom, username, message });
-        document.getElementById("message").value = "";
-    }
-});
+            // Join room
+            socket.emit("join", { room: currentRoom, username });
+        }
 
-// Handle incoming messages
-socket.on("message", (data) => {
-    const messages = document.getElementById("messages");
-    const div = document.createElement("div");
-    div.classList.add(data.username === username ? "sender" : "receiver");
-    div.textContent = `${data.username}: ${data.message}`;
-    messages.appendChild(div);
+        // Send a message
+        document.getElementById("send").addEventListener("click", () => {
+            const message = document.getElementById("message").value.trim();
+            if (!message) return;
 
-    // Scroll to the bottom of the chat window to see the latest messages
-    messages.scrollTop = messages.scrollHeight;
+            socket.emit("send_message", { room: currentRoom, username, message });
+            document.getElementById("message").value = ""; // Clear input
+        });
 
-    // Save the message in the chat history for this room
-    if (!chatHistory[currentRoom]) {
-        chatHistory[currentRoom] = [];
-    }
-    chatHistory[currentRoom].push(data);
-});
+        // Handle incoming messages
+        socket.on("message", (data) => {
+            addMessageToChat(data);
 
+            // Save in history
+            if (!chatHistory[currentRoom]) chatHistory[currentRoom] = [];
+            chatHistory[currentRoom].push(data);
+        });
+
+        // Utility: Add message to chat
+        function addMessageToChat(data) {
+            const div = document.createElement("div");
+            div.className = data.username === username ? "sender" : "receiver";
+            div.textContent = `${data.username}: ${data.message}`;
+            document.getElementById("messages").appendChild(div);
+
+            // Scroll to bottom
+            document.getElementById("chat-body").scrollTop = document.getElementById("chat-body").scrollHeight;
+        }
     </script>
 
 </body>

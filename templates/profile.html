@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Profile</title>
+</head>
+<body>
+    <h1>Your Profile</h1>
+    <form id="profile-form">
+        <label for="name">Name:</label>
+        <input type="text" id="name" value="{{ user_info['name'] }}" required><br>
+
+        <label for="bio">Bio:</label>
+        <textarea id="bio" required>{{ user_info['bio'] }}</textarea><br>
+
+        <button type="submit">Save</button>
+    </form>
+
+    <a href="/chat">Back to Chat</a>
+
+    <script>
+        document.getElementById("profile-form").addEventListener("submit", function(e) {
+            e.preventDefault();
+            const name = document.getElementById("name").value;
+            const bio = document.getElementById("bio").value;
+
+            fetch("/update_profile", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ name, bio })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert("Profile updated successfully!");
+                    window.location.href = "/chat";
+                } else {
+                    alert("Error updating profile.");
+                }
+            });
+        });
+    </script>
+</body>
+</html>

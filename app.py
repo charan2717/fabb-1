@@ -81,14 +81,6 @@ def handle_join(data):
         join_room(room)
         emit("message", {"username": "System", "message": f"{username} has joined the room."}, room=room)
 
-@socketio.on("leave")
-def handle_leave(data):
-    room = data["room"]
-    username = session.get("username")
-    if username:
-        leave_room(room)
-        emit("message", {"username": "System", "message": f"{username} has left the room."}, room=room)
-
 @socketio.on("send_message")
 def handle_send_message(data):
     room = data["room"]
@@ -103,60 +95,21 @@ def handle_send_message(data):
                            (room, username, message))
             conn.commit()
 
-        # Broadcast the message to the room
+        # Emit the message to the room
         emit("message", {"username": username, "message": message}, room=room)
 
-# Search users
-@app.route("/search_user", methods=["POST"])
-def search_user():
-    query = request.json.get("username")
-    with sqlite3.connect("chat.db") as conn:
-        cursor = conn.cursor()
-        cursor.execute("SELECT username FROM users WHERE username LIKE ?", (f"%{query}%",))
-        users = [user[0] for user in cursor.fetchall()]
-    return jsonify(users)
+@socketio.on("leave")
+def handle_leave(data):
+    room = data["room"]
+    username = session.get("username")
+    if username:
+        leave_room(room)
+        emit("message", {"username": "System", "message": f"{username} has left the room."}, room=room)
 
-# Logout route
 @app.route("/logout")
 def logout():
     session.pop("username", None)
     return redirect(url_for("login"))
-
-# Profile routes
-@app.route("/profile")
-def profile():
-    if "username" not in session:
-        return redirect(url_for("login"))
-
-    username = session["username"]
-    with sqlite3.connect("chat.db") as conn:
-        cursor = conn.cursor()
-        cursor.execute("SELECT name, bio FROM users WHERE username = ?", (username,))
-        user_info = cursor.fetchone()
-        if user_info:
-            user_info = {"name": user_info[0], "bio": user_info[1]}
-        else:
-            user_info = {"name": "", "bio": ""}
-
-    return render_template("profile.html", user_info=user_info)
-
-@app.route("/update_profile", methods=["POST"])
-def update_profile():
-    if "username" not in session:
-        return redirect(url_for("login"))
-
-    data = request.get_json()
-    username = session["username"]
-    name = data.get("name")
-    bio = data.get("bio")
-
-    with sqlite3.connect("chat.db") as conn:
-        cursor = conn.cursor()
-        cursor.execute("UPDATE users SET name = ?, bio = ? WHERE username = ?",
-                       (name, bio, username))
-        conn.commit()
-
-    return jsonify({"success": True})
 
 if __name__ == "__main__":
     socketio.run(app, debug=True)

@@ -6,20 +6,21 @@
     <script src="https://cdn.socket.io/4.6.0/socket.io.min.js"></script>
     <style>
         /* Reset styles */
+        
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
         }
-
+        
         body {
             font-family: 'Arial', sans-serif;
             background-color: #f8f8f8;
             display: flex;
             height: 100vh;
         }
-
         /* Left sidebar */
+        
         .sidebar {
             width: 300px;
             background-color: #ffffff;
@@ -27,11 +28,11 @@
             padding: 20px;
             overflow-y: auto;
         }
-
+        
         .sidebar .search-container {
             margin-bottom: 20px;
         }
-
+        
         .sidebar input {
             width: 100%;
             padding: 10px;
@@ -39,24 +40,24 @@
             border-radius: 20px;
             font-size: 16px;
         }
-
+        
         .sidebar .user-list {
             margin-top: 10px;
             list-style-type: none;
         }
-
+        
         .sidebar .user-list li {
             padding: 10px;
             cursor: pointer;
             border-radius: 10px;
             transition: background-color 0.2s;
         }
-
+        
         .sidebar .user-list li:hover {
             background-color: #f0f0f0;
         }
-
         /* Chat area */
+        
         .chat-area {
             flex-grow: 1;
             display: flex;
@@ -66,7 +67,7 @@
             overflow-y: auto;
             box-shadow: -2px 0 12px rgba(0, 0, 0, 0.1);
         }
-
+        
         .chat-header {
             display: flex;
             align-items: center;
@@ -74,26 +75,26 @@
             padding-bottom: 10px;
             margin-bottom: 10px;
         }
-
+        
         .chat-header img {
             width: 40px;
             height: 40px;
             border-radius: 50%;
             margin-right: 10px;
         }
-
+        
         .chat-body {
             flex-grow: 1;
             padding: 10px;
             overflow-y: auto;
             max-height: calc(100vh - 160px);
         }
-
+        
         .message {
             display: flex;
             margin-bottom: 12px;
         }
-
+        
         .message .sender {
             background-color: #0095f6;
             color: white;
@@ -104,7 +105,7 @@
             word-wrap: break-word;
             position: relative;
         }
-
+        
         .message .sender::after {
             content: "";
             position: absolute;
@@ -117,7 +118,7 @@
             border-top: 5px solid transparent;
             border-bottom: 5px solid transparent;
         }
-
+        
         .message .receiver {
             background-color: #e1e1e1;
             color: black;
@@ -128,7 +129,7 @@
             word-wrap: break-word;
             position: relative;
         }
-
+        
         .message .receiver::after {
             content: "";
             position: absolute;
@@ -141,14 +142,14 @@
             border-top: 5px solid transparent;
             border-bottom: 5px solid transparent;
         }
-
+        
         .input-container {
             display: flex;
             padding: 10px;
             border-top: 1px solid #ddd;
             background-color: #ffffff;
         }
-
+        
         .input-container input {
             flex-grow: 1;
             padding: 10px;
@@ -157,7 +158,7 @@
             margin-right: 10px;
             font-size: 16px;
         }
-
+        
         .input-container button {
             background-color: #0095f6;
             border: none;
@@ -167,17 +168,16 @@
             font-size: 16px;
             cursor: pointer;
         }
-
+        
         .input-container button:hover {
             background-color: #007bb5;
         }
-
+        
         @media (max-width: 800px) {
             .sidebar {
                 width: 100%;
                 padding: 10px;
             }
-
             .chat-area {
                 padding: 10px;
             }
@@ -211,20 +211,25 @@
     </div>
 
     <script>
-        const socket = io();
+        // Correct socket initialization
+        const socket = io('https://fabb-liard.vercel.app');
         let currentRoom = null;
         const username = "{{ username }}"; // Provided by Flask
         const chatHistory = {}; // To hold chat history for rooms
 
         // Search for users
-        document.getElementById("search").addEventListener("input", async (e) => {
+        document.getElementById("search").addEventListener("input", async(e) => {
             const query = e.target.value.trim();
             if (!query) return;
 
             const response = await fetch("/search_user", {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ username: query }),
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    username: query
+                }),
             });
 
             const users = await response.json();
@@ -258,7 +263,10 @@
             document.getElementById("send").disabled = false;
 
             // Join room
-            socket.emit("join", { room: currentRoom, username });
+            socket.emit("join", {
+                room: currentRoom,
+                username
+            });
         }
 
         // Send a message
@@ -266,7 +274,12 @@
             const message = document.getElementById("message").value.trim();
             if (!message) return;
 
-            socket.emit("send_message", { room: currentRoom, username, message });
+            socket.emit("send_message", {
+                room: currentRoom,
+                username,
+                message
+            });
+
             document.getElementById("message").value = ""; // Clear input
         });
 
@@ -288,26 +301,6 @@
 
             // Scroll to bottom
             document.getElementById("chat-body").scrollTop = document.getElementById("chat-body").scrollHeight;
-            document.getElementById("send").addEventListener("click", () => {
-                const message = document.getElementById("message").value.trim();
-                if (!message) return;
-
-                const mockData = { username: "You", message };
-                addMessageToChat(mockData);
-                document.getElementById("message").value = "";
-            });
-
-            function addMessageToChat(data) {
-                const messages = document.getElementById("messages");
-                const div = document.createElement("div");
-                div.className = data.username === username ? "sender" : "receiver";
-                div.textContent = `${data.username}: ${data.message}`;
-                messages.appendChild(div);
-                messages.scrollTop = messages.scrollHeight;
-            }
-            const socket = io("https://fabb.vercel.app/");
-
-
         }
     </script>
 

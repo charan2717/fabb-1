@@ -1,12 +1,13 @@
 from flask import Flask, render_template, request, redirect, url_for, session, jsonify
 from flask_socketio import SocketIO, join_room, leave_room, emit
 from werkzeug.security import generate_password_hash, check_password_hash
+from flask_cors import CORS
 import sqlite3
 
 app = Flask(__name__)
 app.secret_key = "your_secret_key"
 socketio = SocketIO(app)
-
+CORS(app)
 # Database setup
 def init_db():
     with sqlite3.connect("chat.db") as conn:
@@ -15,7 +16,9 @@ def init_db():
             CREATE TABLE IF NOT EXISTS users (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 username TEXT UNIQUE NOT NULL,
-                password TEXT NOT NULL
+                password TEXT NOT NULL,
+                name TEXT DEFAULT '',
+                bio TEXT DEFAULT ''
             )
         """)
         cursor.execute("""

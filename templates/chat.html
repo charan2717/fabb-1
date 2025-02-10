@@ -228,7 +228,7 @@
                 },
                 body: JSON.stringify({
                     username: query
-                }),
+                })
             });
 
             const users = await response.json();
@@ -249,7 +249,7 @@
             currentRoom = [username, recipient].sort().join("-");
             document.getElementById("messages").innerHTML = ""; // Clear current chat
 
-            // Load chat history
+            // Load chat history from Firebase
             if (chatHistory[currentRoom]) {
                 chatHistory[currentRoom].forEach((msg) => addMessageToChat(msg));
             }
@@ -279,6 +279,12 @@
                 message
             });
             document.getElementById("message").value = ""; // Clear input
+
+            // Display the message immediately for the sender
+            addMessageToChat({
+                username: "You",
+                message
+            });
         });
 
         // Handle incoming messages
@@ -292,38 +298,17 @@
 
         // Utility: Add message to chat
         function addMessageToChat(data) {
+            const messages = document.getElementById("messages");
             const div = document.createElement("div");
             div.className = data.username === username ? "sender" : "receiver";
             div.textContent = `${data.username}: ${data.message}`;
-            document.getElementById("messages").appendChild(div);
+            messages.appendChild(div);
 
             // Scroll to bottom
-            document.getElementById("chat-body").scrollTop = document.getElementById("chat-body").scrollHeight;
-            document.getElementById("send").addEventListener("click", () => {
-                const message = document.getElementById("message").value.trim();
-                if (!message) return;
-
-                const mockData = {
-                    username: "You",
-                    message
-                };
-                addMessageToChat(mockData);
-                document.getElementById("message").value = "";
-            });
-
-            function addMessageToChat(data) {
-                const messages = document.getElementById("messages");
-                const div = document.createElement("div");
-                div.className = data.username === username ? "sender" : "receiver";
-                div.textContent = `${data.username}: ${data.message}`;
-                messages.appendChild(div);
-                messages.scrollTop = messages.scrollHeight;
-            }
-            const socket = io("https://fabb.vercel.app/");
-
-
+            messages.scrollTop = messages.scrollHeight;
         }
     </script>
+
 
 </body>
 

@@ -2,37 +2,18 @@ from flask import Flask, render_template, request, redirect, url_for, session, j
 from flask_socketio import SocketIO, join_room, leave_room, emit
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_cors import CORS
-import sqlite3
+import firebase_admin
+from firebase_admin import credentials, firestore
+
+# Firebase initialization
+cred = credentials.Certificate("ffff-fe87d-firebase-adminsdk-fbsvc-9fec405662.json")
+firebase_admin.initialize_app(cred)
+db = firestore.client()
 
 app = Flask(__name__)
 app.secret_key = "your_secret_key"
 socketio = SocketIO(app)
 CORS(app)
-# Database setup
-def init_db():
-    with sqlite3.connect("chat.db") as conn:
-        cursor = conn.cursor()
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS users (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                username TEXT UNIQUE NOT NULL,
-                password TEXT NOT NULL,
-                name TEXT DEFAULT '',
-                bio TEXT DEFAULT ''
-            )
-        """)
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS messages (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                room TEXT NOT NULL,
-                sender TEXT NOT NULL,
-                message TEXT NOT NULL,
-                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
-        conn.commit()
-
-init_db()
 
 # Routes
 @app.route("/", methods=["GET", "POST"])
@@ -41,15 +22,13 @@ def login():
         username = request.form["username"]
         password = request.form["password"]
 
-        with sqlite3.connect("chat.db") as conn:
-            cursor = conn.cursor()
-            cursor.execute("SELECT * FROM users WHERE username = ?", (username,))
-            user = cursor.fetchone()
-            if user and check_password_hash(user[2], password):
-                session["username"] = username
-                return redirect(url_for("chat"))
-            else:
-                return "Invalid credentials"
+        user_ref = db.collection("users").document(username)
+        user = user_ref.get()
+        if user.exists and check_password_hash(user.to_dict()["password"], password):
+            session["username"] = username
+            return redirect(url_for("chat"))
+        else:
+            return "Invalid credentials"
     return render_template("login.html")
 
 # Route to show profile
@@ -57,17 +36,12 @@ def login():
 def profile():
     if "username" not in session:
         return redirect(url_for("login"))
-    
+
     username = session["username"]
-    with sqlite3.connect("chat.db") as conn:
-        cursor = conn.cursor()
-        cursor.execute("SELECT name, bio FROM users WHERE username = ?", (username,))
-        user_info = cursor.fetchone()
-        if user_info:
-            user_info = {"name": user_info[0], "bio": user_info[1]}
-        else:
-            user_info = {"name": "", "bio": ""}
-    
+    user_ref = db.collection("users").document(username)
+    user_info = user_ref.get().to_dict()
+    user_info = user_info if user_info else {"name": "", "bio": ""}
+
     return render_template("profile.html", user_info=user_info)
 
 # Route to update profile
@@ -80,16 +54,11 @@ def update_profile():
     username = session["username"]
     name = data.get("name")
     bio = data.get("bio")
-    
-    with sqlite3.connect("chat.db") as conn:
-        cursor = conn.cursor()
-        cursor.execute("UPDATE users SET name = ?, bio = ? WHERE username = ?",
-                       (name, bio, username))
-        conn.commit()
-    
+
+    user_ref = db.collection("users").document(username)
+    user_ref.update({"name": name, "bio": bio})
+
     return jsonify({"success": True})
-
-
 
 @app.route("/register", methods=["GET", "POST"])
 def register():
@@ -97,15 +66,18 @@ def register():
         username = request.form["username"]
         password = request.form["password"]
 
-        with sqlite3.connect("chat.db") as conn:
-            cursor = conn.cursor()
-            try:
-                cursor.execute("INSERT INTO users (username, password) VALUES (?, ?)",
-                               (username, generate_password_hash(password)))
-                conn.commit()
-                return redirect(url_for("login"))
-            except sqlite3.IntegrityError:
-                return "Username already exists"
+        user_ref = db.collection("users").document(username)
+        if user_ref.get().exists:
+            return "Username already exists"
+
+        user_ref.set({
+            "password": generate_password_hash(password),
+            "name": "",
+            "bio": ""
+        })
+
+        return redirect(url_for("login"))
+
     return render_template("register.html")
 
 @app.route("/chat")
@@ -117,11 +89,9 @@ def chat():
 @app.route("/search_user", methods=["POST"])
 def search_user():
     username = request.json.get("username")
-    with sqlite3.connect("chat.db") as conn:
-        cursor = conn.cursor()
-        cursor.execute("SELECT username FROM users WHERE username LIKE ?", (f"%{username}%",))
-        users = cursor.fetchall()
-    return jsonify([user[0] for user in users if user[0] != session["username"]])
+    users_ref = db.collection("users")
+    users = [doc.id for doc in users_ref.stream() if username.lower() in doc.id.lower() and doc.id != session["username"]]
+    return jsonify(users)
 
 # WebSocket events
 @socketio.on("join")
@@ -129,14 +99,12 @@ def handle_join(data):
     room = data["room"]
     username = data["username"]
     join_room(room)
-    
+
     # Retrieve and send past messages
-    with sqlite3.connect("chat.db") as conn:
-        cursor = conn.cursor()
-        cursor.execute("SELECT sender, message, timestamp FROM messages WHERE room = ?", (room,))
-        messages = cursor.fetchall()
-        for message in messages:
-            emit("message", {"username": message[0], "message": message[1], "timestamp": message[2]}, room=room)
+    messages_ref = db.collection("messages").where("room", "==", room).order_by("timestamp")
+    for message in messages_ref.stream():
+        msg_data = message.to_dict()
+        emit("message", {"username": msg_data["sender"], "message": msg_data["message"], "timestamp": msg_data.get("timestamp")}, room=room)
 
     emit("message", {"username": "System", "message": f"{username} has joined the room."}, room=room)
 
@@ -146,7 +114,6 @@ def handle_leave(data):
     username = data["username"]
     leave_room(room)
     emit("message", {"username": "System", "message": f"{username} has left the room."}, room=room)
-    
 
 @socketio.on("send_message")
 def handle_send_message(data):
@@ -154,20 +121,20 @@ def handle_send_message(data):
     username = data["username"]
     message = data["message"]
 
-    # Save the message to the database
-    with sqlite3.connect("chat.db") as conn:
-        cursor = conn.cursor()
-        cursor.execute("INSERT INTO messages (room, sender, message) VALUES (?, ?, ?)",
-                       (room, username, message))
-        conn.commit()
+    # Save the message to the Firestore
+    db.collection("messages").add({
+        "room": room,
+        "sender": username,
+        "message": message,
+        "timestamp": firestore.SERVER_TIMESTAMP
+    })
 
     emit("message", {"username": username, "message": message}, room=room)
 
 @app.route("/logout")
 def logout():
-    session.pop("username", None)  # Remove the username from the session
-    return redirect(url_for("login"))  # Redirect to login page
-
+    session.pop("username", None)
+    return redirect(url_for("login"))
 
 if __name__ == "__main__":
     socketio.run(app, debug=True)
